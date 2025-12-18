@@ -28,3 +28,6 @@ echo "-------------------------------------------------------"
 echo "VNC stack is booting. Check port 6080 in your Ports tab."
 echo "If you see a blank screen with a cursor, it's working!"
 echo "-------------------------------------------------------"
+
+gcc compiler.c -o tritc
+./tritc
