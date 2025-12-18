@@ -1,0 +1,16 @@
+CLS 2        // Clear Blue
+WAK 0 0      // Color Black
+WAK 1 0      // X = 0
+WAK 2 220    // Y = 220 (Move to bottom)
+WAK 3 243    // Width = 243 (Full Screen)
+WAK 4 23     // Height = 23 (Bar thickness)
+RECT 0 0     // Draw Taskbar
+
+WAK 0 1      // Color Red
+WAK 1 5      // X = 5
+WAK 2 224    // Y = 224
+WAK 3 25     // Width = 25
+WAK 4 15     // Height = 15
+RECT 0 0     // Draw Start Button
+
+SLP 0 0      // System Idle
