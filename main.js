@@ -53,7 +53,7 @@ function assemble(filename) {
 }
 
 // Initial Boot
-assemble('main.vasm');
+assemble('os.vasm');
 
 // Main Execution Loop
 setInterval(() => {

@@ -1,2 +1,2 @@
 # FORBIDDEN-OS-trinary-
-attempt to make a virtual pc using trinary
+Attempt to make a virtual PC using trinary
