@@ -1,24 +1,38 @@
-// Graphics Test: Draw a colored pixel at a calculated 50-trit position
-int x = 121
-int y = 121
-int red = 13
-int green = 13
-int blue = 13
+// Compiled from Trit-C
 
-func paintCenter
-    // We pass our 50-trit variables to the hardware registers T0-T6
-    color(red, green, blue)
-    pos(x, y)
-    
-    // The RECT opcode in your CPU will now trigger gpu.render()
-    draw()
-    
-    // Move the pixel to show 50-trit math speed
-    x = x + 1
-    if (x == 243) {
-        x = 0
-    }
-    call paintCenter
-return
+// 1. Desktop Background
+SET 0 0
+SET 1 0
+SET 2 8
+SET 3 0
+SET 4 0
+SET 5 243
+SET 6 243
+RECT
 
-call paintCenter
+// 2. VOID-3 Taskbar
+WAK 0 10
+WAK 1 12
+WAK 2 15
+WAK 3 0
+WAK 4 216
+WAK 5 243
+WAK 6 27
+RECT
+
+// 3. Hardware Pull for Cursor
+WAK 3 50
+WAK 4 51
+
+// 4. Input Logic
+KEY 7 32
+
+// 5. Draw Interactive Orb
+SET 0 13
+SET 1 0
+SET 2 0
+SET 5 20
+SET 6 20
+RECT
+
+HALT

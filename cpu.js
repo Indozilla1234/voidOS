@@ -1,26 +1,36 @@
 /**
- * VOID-3 TRANSCENDENT CPU
- * Architecture: Balanced Ternary
- * Word Size: 50 Trits (~79-bit precision)
- * Instruction Format: 15 Trits [4: OP][5: ARG1][6: ARG2]
+ * VOID-3 TRANSCENDENT CPU - v2.3 (High-Intensity Input & Debug)
+ * Optimized for Balanced Ternary Operations
  */
 
 class Void3CPU {
     constructor(memoryBuffer) {
         this.memory = memoryBuffer;
-        
-        // 27 General Purpose Registers (T0-T26) as BigInts
         this.regs = Array.from({ length: 27 }, () => 0n);
         
-        this.pc = 531441;           // Program Counter (3^12)
-        this.sp = 1594322;          // Stack Pointer at end of memory
+        this.pc = 531441;           
+        this.sp = 1594322;          
         this.regs[25] = BigInt(this.sp);
         
         this.halted = false;
+        this.mouseX = 0;
+        this.mouseY = 0;
+        this.mouseClicked = 0; 
+        this.keys = {};        
         
-        // 50-Trit Constants
         this.TRIT_LIMIT = 3n ** 50n;
         this.HALF_LIMIT = this.TRIT_LIMIT / 2n;
+    }
+
+    updateMouse(x, y, click) {
+        this.mouseX = x;
+        this.mouseY = y;
+        this.mouseClicked = click;
+    }
+
+    updateKey(keyCode, isPressed) {
+        // Force strict 1 or 0 for the map
+        this.keys[keyCode] = isPressed ? 1 : 0;
     }
 
     clamp(val) {
@@ -51,7 +61,6 @@ class Void3CPU {
     step() {
         if (this.halted) return;
 
-        // Fetch 15-trit instruction
         const op = Number(this.decode(this.pc, 4));
         const a1 = Number(this.decode(this.pc + 4, 5)) % 27;
         const a2Val = this.decode(this.pc + 9, 6);
@@ -59,32 +68,50 @@ class Void3CPU {
         switch (op) {
             case 0:  this.halted = true; break;
             
-            // Arithmetic
             case 1:  this.regs[a1] = this.clamp(this.regs[a1] + this.regs[Number(a2Val) % 27]); break; 
             case 2:  this.regs[a1] = this.clamp(this.regs[a1] - this.regs[Number(a2Val) % 27]); break; 
             case 3:  this.regs[a1] = this.clamp(this.regs[a1] * this.regs[Number(a2Val) % 27]); break; 
-            case 4:  
-                let divisor = this.regs[Number(a2Val) % 27];
-                this.regs[a1] = divisor !== 0n ? this.clamp(this.regs[a1] / divisor) : 0n; 
-                break; 
-            case 6:  this.regs[a1] = -this.regs[a1]; break; 
-
-            // Movement
+            
             case 11: this.regs[a1] = this.clamp(a2Val); break; // SET
             case 12: this.regs[a1] = this.regs[Number(a2Val) % 27]; break; // CPY
 
-            // Flow
-            case 20: this.pc = Number(a2Val) - 15; break; // JMP
-            case 24: // CAL
-                this.encode(Number(this.regs[25]), 15, BigInt(this.pc + 15));
-                this.regs[25] -= 15n;
-                this.pc = Number(a2Val) - 15;
+            case 20: this.pc += (Number(a2Val) - 15); break; // JMP
+            case 21: // BRN
+                if (this.regs[a1] < 0n) this.pc += (Number(a2Val) - 15);
+                break;
+            case 22: // BRP
+                if (this.regs[a1] > 0n) this.pc += (Number(a2Val) - 15);
                 break;
 
-            // Hardware
+            case 23: // TRI
+                let v1 = this.regs[a1];
+                let v2 = this.regs[Number(a2Val) % 27];
+                if (v1 < v2) this.regs[a1] = -1n;
+                else if (v1 > v2) this.regs[a1] = 1n;
+                else this.regs[a1] = 0n;
+                break;
+
             case 30: this.drawRect(); break; 
-            case 40: console.log(`VOID_OUT [T${a1}]:`, this.regs[a1].toString()); break; 
-            case 45: this.halted = true; break; 
+
+            case 31: // WAK
+                if (a2Val === 50n) this.regs[a1] = BigInt(this.mouseX);
+                else if (a2Val === 51n) this.regs[a1] = BigInt(this.mouseY);
+                else if (a2Val === 52n) this.regs[a1] = BigInt(this.mouseClicked);
+                break;
+
+            case 32: // KEY 
+                // Convert BigInt constant to number for lookup
+                let kCode = Number(a2Val);
+                let isDown = this.keys[kCode] === 1;
+                this.regs[a1] = isDown ? 13n : 0n; 
+                
+                // DEBUG: Only prints if space is pressed
+                if (isDown && kCode === 32) {
+                   // console.log("CPU: Space Signal Detected!");
+                }
+                break;
+            
+            case 45: this.halted = true; break; // SLP
         }
 
         this.pc += 15;
@@ -101,11 +128,10 @@ class Void3CPU {
 
         for (let i = 0; i < w; i++) {
             for (let j = 0; j < h; j++) {
-                let targetX = x + i;
-                let targetY = y + j;
-
-                if (targetX >= 0 && targetX < 243 && targetY >= 0 && targetY < 243) {
-                    let addr = (targetY * 243 + targetX) * 9;
+                let tx = x + i;
+                let ty = y + j;
+                if (tx >= 0 && tx < 243 && ty >= 0 && ty < 243) {
+                    let addr = (ty * 243 + tx) * 9;
                     this.encode(addr, 3, r);
                     this.encode(addr + 3, 3, g);
                     this.encode(addr + 6, 3, b);

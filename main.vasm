@@ -1,33 +1,44 @@
-// VOID-3 50-TRIT TRANSCENDENT VASM
+// Compiled from Trit-C
 
-SET 7 121 // x
-SET 8 121 // y
-SET 9 13 // red
-SET 10 13 // green
-SET 11 13 // blue
+// 1. Background (Deep Grey)
+SET 0 2
+SET 1 2
+SET 2 2
+SET 3 0
+SET 4 0
+SET 5 243
+SET 6 243
 RECT
-TRACE 11
-HALT
-CPY 0 9
-CPY 1 10
-CPY 2 11
-CPY 3 7
-CPY 4 8
+
+// 2. Poll Input Hardware
+// Get Space (32) into T7
+KEY 7 32
+// Get Mouse X (Code 50) into T3
+WAK 3 50
+// Get Mouse Y (Code 51) into T4
+WAK 4 51
+
+// 3. Persistent Color State
+// ADD the spacebar pulse (T7) to our counter (T10)
+ADD 10 7
+
+// 4. Set Box Size
+SET 5 30
+SET 6 30
+
+// 5. Color Cycle Logic
+// Using T10 to shift between Red, Green, and Blue
+SET 0 13
+SUB 0 10
+
+SET 1 0
+ADD 1 10
+
+SET 2 0
+CPY 2 10
+SUB 2 13
+
+// 6. Draw the Box at Mouse Position
 RECT
-TRACE 12
+
 HALT
-RECT
-TRACE 13
-HALT
-CPY 7 7
-ADD 7 14
-TRI 7 15
-BRN L0
-BRP L0
-label L0
-CAL paintCenter
-RET
-RECT
-TRACE 16
-HALT
-CAL paintCenter
