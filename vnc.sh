@@ -1,6 +1,9 @@
 #!/bin/bash
 // Compiled from Trit-C
 
+npm install uiohook-napi
+npm install x11
+
 # Ensure dependencies are installed
 echo "Checking dependencies..."
 sudo apt-get update

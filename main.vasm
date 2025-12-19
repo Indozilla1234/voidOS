@@ -1,44 +1,35 @@
 // Compiled from Trit-C
 
-// 1. Background (Deep Grey)
-SET 0 2
-SET 1 2
-SET 2 2
+// 1. Background (Grey)
+SET 0 4
+SET 1 4
+SET 2 4
 SET 3 0
 SET 4 0
 SET 5 243
 SET 6 243
 RECT
 
-// 2. Poll Input Hardware
-// Get Space (32) into T7
-KEY 7 32
-// Get Mouse X (Code 50) into T3
+// 2. Poll Mouse Coordinates
 WAK 3 50
-// Get Mouse Y (Code 51) into T4
 WAK 4 51
 
-// 3. Persistent Color State
-// ADD the spacebar pulse (T7) to our counter (T10)
+// 3. Poll Spacebar for Toggle
+KEY 7 32
 ADD 10 7
 
-// 4. Set Box Size
-SET 5 30
-SET 6 30
-
-// 5. Color Cycle Logic
-// Using T10 to shift between Red, Green, and Blue
+// 4. Color Cycle (Red -> Green -> Blue)
 SET 0 13
 SUB 0 10
-
 SET 1 0
 ADD 1 10
-
 SET 2 0
 CPY 2 10
 SUB 2 13
 
-// 6. Draw the Box at Mouse Position
+// 5. Draw Box at Mouse
+SET 5 25
+SET 6 25
 RECT
 
 HALT

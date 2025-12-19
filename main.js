@@ -1,7 +1,7 @@
 const Void3CPU = require('./cpu.js');
 const TrinaryGPU = require('./gpu.js');
 const fs = require('fs');
-const readline = require('readline');
+const x11 = require('x11');
 
 // --- 1. INITIALIZATION ---
 const memory = new Int8Array(1594323); 
@@ -14,7 +14,40 @@ const OPMAP = {
     "WAK": 31, "KEY": 32, "SLP": 45
 };
 
-// --- 2. THE BALANCED TERNARY ENCODER ---
+// --- 2. X11 HARDWARE BRIDGE ---
+// This connects to the DISPLAY=:1 created by your bash script
+x11.createClient({ display: ':1' }, (err, display) => {
+    if (err) {
+        console.error("X11 ERROR: Ensure your bash script is running and DISPLAY is :1");
+        return;
+    }
+    const X = display.client;
+    const root = display.screen[0].root;
+
+    // Capture KeyPress (2) and PointerMotion (6) from the X Server
+    X.ChangeWindowAttributes(root, { 
+        eventMask: x11.eventMask.KeyPress | x11.eventMask.PointerMotion 
+    });
+
+    X.on('event', (ev) => {
+        if (ev.type === 2) { // KEYBOARD
+            // X11 Keycodes are raw hardware codes. 
+            // Space is typically 65, Arrows are usually 111 (Up), 116 (Down), 113 (Left), 114 (Right)
+            cpu.updateKey(ev.keycode, true);
+            setTimeout(() => cpu.updateKey(ev.keycode, false), 70);
+        }
+        if (ev.type === 6) { // MOUSE
+            // ev.x and ev.y are the absolute coordinates on the 800x600 Xvfb screen
+            // We scale them down to your 243x243 ternary resolution
+            const scaledX = Math.floor((ev.x / 800) * 243);
+            const scaledY = Math.floor((ev.y / 600) * 243);
+            cpu.updateMouse(scaledX, scaledY, 0);
+        }
+    });
+    console.log("VOID-3: X11 Input Link Established on :1");
+});
+
+// --- 3. THE ASSEMBLER & ENCODER ---
 function encodeBalanced(ptr, length, value) {
     let temp = BigInt(value);
     for (let i = 0; i < length; i++) {
@@ -25,80 +58,37 @@ function encodeBalanced(ptr, length, value) {
     return ptr + length;
 }
 
-// --- 3. THE ASSEMBLER ---
 function assemble(filename) {
-    if (!fs.existsSync(filename)) {
-        console.error(`File ${filename} not found.`);
-        return;
-    }
+    if (!fs.existsSync(filename)) return;
     const lines = fs.readFileSync(filename, 'utf8').split('\n');
-    let ptr = 531441; // Start of execution memory (3^12)
-
+    let ptr = 531441; 
     lines.forEach(line => {
-        // Strip comments and trim whitespace
-        const cleanLine = line.split('//')[0].trim();
-        if (!cleanLine) return;
-
-        const parts = cleanLine.split(/\s+/);
-        let opName = parts[0].toUpperCase();
-        
-        if (OPMAP[opName] !== undefined) {
-            let op = OPMAP[opName];
-            let v1 = parseInt(parts[1]) || 0;
-            let v2 = parseInt(parts[2]) || 0;
-
-            // Encode: 4 trits for OP, 5 trits for ARG1, 6 trits for ARG2 (15 total per line)
-            ptr = encodeBalanced(ptr, 4, op);   
-            ptr = encodeBalanced(ptr, 5, v1);   
-            ptr = encodeBalanced(ptr, 6, v2);   
-        }
+        const clean = line.split('//')[0].trim();
+        if (!clean) return;
+        const parts = clean.split(/\s+/);
+        let op = OPMAP[parts[0].toUpperCase()];
+        if (op === undefined) return;
+        ptr = encodeBalanced(ptr, 4, op);   
+        ptr = encodeBalanced(ptr, 5, parseInt(parts[1]) || 0);   
+        ptr = encodeBalanced(ptr, 6, parseInt(parts[2]) || 0);   
     });
-    console.log("VOID-3: Assembly Complete. System Online.");
+    console.log(`VOID-3: VASM Loaded from ${filename}`);
 }
 
-// --- 4. HARDWARE INPUT BRIDGE ---
-readline.emitKeypressEvents(process.stdin);
-if (process.stdin.isTTY) process.stdin.setRawMode(true);
-
-process.stdin.on('keypress', (str, key) => {
-    // Exit on Ctrl+C
-    if (key && key.ctrl && key.name === 'c') process.exit();
-    
-    // Keycode detection (Space = 32, otherwise ASCII char code)
-    let code = (key && key.name === 'space') ? 32 : (str ? str.charCodeAt(0) : 0);
-    
-    // Pulse the key state in the CPU
-    cpu.updateKey(code, true);
-    setTimeout(() => cpu.updateKey(code, false), 150);
-});
-
-// Ghost Mouse Simulation (Circular Path)
-let angle = 0;
-setInterval(() => {
-    angle += 0.1;
-    const mX = Math.floor(121 + Math.cos(angle) * 60);
-    const mY = Math.floor(121 + Math.sin(angle) * 60);
-    cpu.updateMouse(mX, mY, 0); 
-}, 50);
-
-// --- 5. EXECUTION BOOT ---
+// --- 4. EXECUTION LOOP ---
 assemble('main.vasm');
 
-// Main Render & Logic Loop
 setInterval(() => {
-    // Refresh temporary drawing registers (T0-T6: R,G,B,X,Y,W,H)
-    // This prevents the screen from turning into a smeared mess
+    // Reset standard drawing registers
     for(let r=0; r<=6; r++) cpu.regs[r] = 0n;
-    
-    // Reset Program Counter to start of VASM code
     cpu.pc = 531441;
     cpu.halted = false;
 
-    // Run instruction burst
-    for(let i=0; i<15000 && !cpu.halted; i++) {
+    // Run the CPU for this frame
+    for(let i=0; i<30000 && !cpu.halted; i++) {
         cpu.step(); 
     }
     
-    // Render Framebuffer (First 531,441 trits)
+    // Push buffer to GPU
     gpu.render(memory.slice(0, 531441));
 }, 100);
