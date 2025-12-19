@@ -1,88 +1,33 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+const { createCanvas } = require('canvas');
+const fs = require('fs');
+const { exec } = require('child_process');
 
-#define R_T0 0 // RED
-#define R_T3 3 // X
-#define R_T7 7 // First General Purpose Register
-#define R_T25 25 // Stack Pointer
-#define R_T26 26 // Status/Logic Register
-
-typedef struct {
-    char name[50];
-    int reg;   // Which Trit-Register it lives in
-    int is_ptr; 
-} Symbol;
-
-Symbol table[27]; // Mapping variables to our 27 registers
-int var_count = 0;
-
-int get_reg(char *name) {
-    for (int i = 0; i < var_count; i++) {
-        if (strcmp(table[i].name, name) == 0) return table[i].reg;
-    }
-    // Auto-allocate next register starting from T7
-    int new_reg = R_T7 + var_count;
-    strcpy(table[var_count].name, name);
-    table[var_count].reg = new_reg;
-    var_count++;
-    return new_reg;
-}
-
-int main() {
-    FILE *in = fopen("main.tc", "r");
-    FILE *out = fopen("main.vasm", "w");
-    char line[256];
-    if (!in || !out) return 1;
-
-    fprintf(out, "// TRIT-C UNIVERSAL COMPILER OUTPUT\n");
-
-    while (fgets(line, sizeof(line), in)) {
-        char v1[50], v2[50], v3[50];
-        int val;
-
-        // 1. Pointer Store: *ptr = val
-        if (sscanf(line, " *%s = %d", v1, &val) == 2) {
-            fprintf(out, "WAK %d %d\n", R_T26, val); // Temp value in T26
-            fprintf(out, "STR %d %d\n", R_T26, get_reg(v1));
-            continue;
-        }
-
-        // 2. Logic: if (var == true)
-        if (sscanf(line, " if ( %s == true )", v1) == 1) {
-            fprintf(out, "WAK %d 1\n", R_T26);
-            fprintf(out, "TRI %d %d\n", get_reg(v1), R_T26);
-            fprintf(out, "BRP "); // Next part of logic would handle the address
-            continue;
-        }
-
-        // 3. Balanced Assignment: var = false / true / null
-        if (sscanf(line, " %s = false", v1) == 1) {
-            fprintf(out, "WAK %d -1\n", get_reg(v1)); continue;
-        }
-        if (sscanf(line, " %s = true", v1) == 1) {
-            fprintf(out, "WAK %d 1\n", get_reg(v1)); continue;
-        }
-        if (sscanf(line, " %s = null", v1) == 1) {
-            fprintf(out, "WAK %d 0\n", get_reg(v1)); continue;
-        }
-
-        // 4. Arithmetic: var = var + var
-        if (sscanf(line, " %s = %s + %s", v1, v2, v3) == 3) {
-            fprintf(out, "CPY %d %d\n", get_reg(v1), get_reg(v2));
-            fprintf(out, "ADD %d %d\n", get_reg(v1), get_reg(v3));
-            continue;
-        }
-
-        // 5. Hardware Commands
-        if (strstr(line, "RECT")) fprintf(out, "RECT\n");
-        if (strstr(line, "pos(")) {
-            int x, y; sscanf(line, " pos(%d,%d)", &x, &y);
-            fprintf(out, "WAK 3 %d\nWAK 4 %d\n", x, y);
-        }
-        // ... color and size logic here ...
+class TrinaryGPU {
+    constructor() { 
+        this.canvas = createCanvas(243, 243); 
+        this.ctx = this.canvas.getContext('2d');
     }
 
-    fclose(in); fclose(out);
-    return 0;
+    render(vram) {
+        const imgData = this.ctx.createImageData(243, 243);
+        for (let i = 0; i < 59049; i++) {
+            let addr = i * 9;
+            let r = 0, g = 0, b = 0;
+            for(let t=0; t<3; t++) {
+                r += (vram[addr+t] || 0) * Math.pow(3, t);
+                g += (vram[addr+3+t] || 0) * Math.pow(3, t);
+                b += (vram[addr+6+t] || 0) * Math.pow(3, t);
+            }
+            let p = i * 4;
+            imgData.data[p] = Math.min(255, r * 9.8);
+            imgData.data[p+1] = Math.min(255, g * 9.8);
+            imgData.data[p+2] = Math.min(255, b * 9.8);
+            imgData.data[p+3] = 255;
+        }
+        this.ctx.putImageData(imgData, 0, 0);
+        fs.writeFileSync('frame.png', this.canvas.toBuffer());
+        exec('export DISPLAY=:1 && feh --bg-scale --refresh 0.1 frame.png');
+    }
 }
+
+module.exports = TrinaryGPU;

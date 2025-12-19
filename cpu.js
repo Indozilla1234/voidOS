@@ -1,93 +1,114 @@
+/**
+ * VOID-3 TRANSCENDENT CPU
+ * Architecture: Balanced Ternary
+ * Word Size: 50 Trits (~79-bit precision)
+ * Instruction Format: 15 Trits [4: OP][5: ARG1][6: ARG2]
+ */
+
 class Void3CPU {
-    constructor(memory) {
-        this.memory = memory;
-        // 27 Registers: T0-T26
-        // T25 = Stack Pointer, T26 = Status Register
-        this.regs = new Int32Array(27); 
-        this.pc = 531441; // Code start (3^12)
-        this.regs[25] = 1594322; // Stack starts at end of memory
+    constructor(memoryBuffer) {
+        this.memory = memoryBuffer;
+        
+        // 27 General Purpose Registers (T0-T26) as BigInts
+        this.regs = Array.from({ length: 27 }, () => 0n);
+        
+        this.pc = 531441;           // Program Counter (3^12)
+        this.sp = 1594322;          // Stack Pointer at end of memory
+        this.regs[25] = BigInt(this.sp);
+        
         this.halted = false;
+        
+        // 50-Trit Constants
+        this.TRIT_LIMIT = 3n ** 50n;
+        this.HALF_LIMIT = this.TRIT_LIMIT / 2n;
     }
 
-    // Decode trits at address into a base-10 integer
+    clamp(val) {
+        let res = val % this.TRIT_LIMIT;
+        if (res > this.HALF_LIMIT) res -= this.TRIT_LIMIT;
+        if (res < -this.HALF_LIMIT) res += this.TRIT_LIMIT;
+        return res;
+    }
+
     decode(addr, length) {
-        let val = 0;
+        let val = 0n;
         for (let i = 0; i < length; i++) {
-            val += (this.memory[addr + i] || 0) * Math.pow(3, i);
+            let trit = BigInt(this.memory[addr + i] || 0);
+            val += trit * (3n ** BigInt(i));
         }
         return val;
     }
 
+    encode(addr, length, value) {
+        let temp = value;
+        for (let i = 0; i < length; i++) {
+            let trit = Number(((temp + 1n) % 3n) - 1n);
+            this.memory[addr + i] = trit;
+            temp = (temp - BigInt(trit)) / 3n;
+        }
+    }
+
     step() {
         if (this.halted) return;
-        
-        // Each instruction is 15 trits: [OP: 3][A1: 6][A2: 6]
-        const op = this.decode(this.pc, 3);
-        const a1 = this.decode(this.pc + 3, 6);
-        const a2 = this.decode(this.pc + 9, 6);
+
+        // Fetch 15-trit instruction
+        const op = Number(this.decode(this.pc, 4));
+        const a1 = Number(this.decode(this.pc + 4, 5)) % 27;
+        const a2Val = this.decode(this.pc + 9, 6);
 
         switch (op) {
-            case 0:  this.halted = true; break; // SLP / HALT
+            case 0:  this.halted = true; break;
             
-            // --- Arithmetic ---
-            case 1:  this.regs[a1 % 27] += this.regs[a2 % 27]; break; // ADD
-            case 2:  this.regs[a1 % 27] -= this.regs[a2 % 27]; break; // SUB
-            case 3:  this.regs[a1 % 27] *= this.regs[a2 % 27]; break; // MUL
-            case 4:  this.regs[a1 % 27] = Math.floor(this.regs[a1 % 27] / (this.regs[a2 % 27] || 1)); break; // DIV
+            // Arithmetic
+            case 1:  this.regs[a1] = this.clamp(this.regs[a1] + this.regs[Number(a2Val) % 27]); break; 
+            case 2:  this.regs[a1] = this.clamp(this.regs[a1] - this.regs[Number(a2Val) % 27]); break; 
+            case 3:  this.regs[a1] = this.clamp(this.regs[a1] * this.regs[Number(a2Val) % 27]); break; 
+            case 4:  
+                let divisor = this.regs[Number(a2Val) % 27];
+                this.regs[a1] = divisor !== 0n ? this.clamp(this.regs[a1] / divisor) : 0n; 
+                break; 
+            case 6:  this.regs[a1] = -this.regs[a1]; break; 
 
-            // --- Balanced Logic (Tritwise) ---
-            case 5:  this.regs[a1 % 27] = Math.min(this.regs[a1 % 27], this.regs[a2 % 27]); break; // MIN (AND)
-            case 6:  this.regs[a1 % 27] = Math.max(this.regs[a1 % 27], this.regs[a2 % 27]); break; // MAX (OR)
-            
-            // --- The Balanced Comparison (The Rule Maker) ---
-            case 7:  // TRI: 1 (True), -1 (False), 0 (Null/Equal)
-                let diff = this.regs[a1 % 27] - this.regs[a2 % 27];
-                if (diff > 0) this.regs[26] = 1;
-                else if (diff < 0) this.regs[26] = -1;
-                else this.regs[26] = 0;
+            // Movement
+            case 11: this.regs[a1] = this.clamp(a2Val); break; // SET
+            case 12: this.regs[a1] = this.regs[Number(a2Val) % 27]; break; // CPY
+
+            // Flow
+            case 20: this.pc = Number(a2Val) - 15; break; // JMP
+            case 24: // CAL
+                this.encode(Number(this.regs[25]), 15, BigInt(this.pc + 15));
+                this.regs[25] -= 15n;
+                this.pc = Number(a2Val) - 15;
                 break;
 
-            // --- Flow Control ---
-            case 8:  this.pc = a1 - 15; break; // JMP
-            case 9:  if (this.regs[26] === 0)  this.pc = a1 - 15; break; // BRZ (Branch Null/Zero)
-            case 10: if (this.regs[26] === 1)  this.pc = a1 - 15; break; // BRP (Branch True/Pos)
-            case 11: if (this.regs[26] === -1) this.pc = a1 - 15; break; // BRN (Branch False/Neg)
-
-            // --- Data Movement ---
-            case 12: this.regs[a1 % 27] *= 3; break; // TSL (Trit Shift Left)
-            case 13: this.regs[a1 % 27] = Math.floor(this.regs[a1 % 27] / 3); break; // TSR (Trit Shift Right)
-            case 14: this.regs[a1 % 27] = a2; break; // WAK (Load Immediate)
-            case 17: this.regs[a1 % 27] = this.regs[a2 % 27]; break; // CPY (Register Copy)
-
-            // --- Memory Pointers (The C-Bridge) ---
-            case 15: // LOD: T[a1] = Memory[ T[a2] ]
-                this.regs[a1 % 27] = this.memory[this.regs[a2 % 27]]; break;
-            case 16: // STR: Memory[ T[a2] ] = T[a1]
-                this.memory[this.regs[a2 % 27]] = this.regs[a1 % 27]; break;
-
-            // --- Hardware Blitter ---
-            case 20: this.drawRect(); break; // RECT
+            // Hardware
+            case 30: this.drawRect(); break; 
+            case 40: console.log(`VOID_OUT [T${a1}]:`, this.regs[a1].toString()); break; 
+            case 45: this.halted = true; break; 
         }
-        
+
         this.pc += 15;
     }
 
     drawRect() {
-        // GPU Registers: T0=R, T1=G, T2=B, T3=X, T4=Y, T5=W, T6=H
-        let r=this.regs[0], g=this.regs[1], b=this.regs[2];
-        let xS=this.regs[3], yS=this.regs[4], w=this.regs[5], h=this.regs[6];
+        const r = this.regs[0];
+        const g = this.regs[1];
+        const b = this.regs[2];
+        const x = Number(this.regs[3]);
+        const y = Number(this.regs[4]);
+        const w = Number(this.regs[5]);
+        const h = Number(this.regs[6]);
 
-        for (let i = 0; i < h; i++) {
-            for (let j = 0; j < w; j++) {
-                let x = xS + j, y = yS + i;
-                if (x >= 0 && x < 243 && y >= 0 && y < 243) {
-                    let addr = (y * 243 + x) * 9;
-                    // Write Color trits
-                    for(let k=0; k<3; k++) {
-                        this.memory[addr+k] = Math.floor(r / Math.pow(3, k)) % 3;
-                        this.memory[addr+3+k] = Math.floor(g / Math.pow(3, k)) % 3;
-                        this.memory[addr+6+k] = Math.floor(b / Math.pow(3, k)) % 3;
-                    }
+        for (let i = 0; i < w; i++) {
+            for (let j = 0; j < h; j++) {
+                let targetX = x + i;
+                let targetY = y + j;
+
+                if (targetX >= 0 && targetX < 243 && targetY >= 0 && targetY < 243) {
+                    let addr = (targetY * 243 + targetX) * 9;
+                    this.encode(addr, 3, r);
+                    this.encode(addr + 3, 3, g);
+                    this.encode(addr + 6, 3, b);
                 }
             }
         }
