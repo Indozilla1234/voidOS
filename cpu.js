@@ -1,93 +1,141 @@
-const { createCanvas } = require('canvas');
-const fs = require('fs');
-const { exec } = require('child_process');
-
 /**
- * VOID-3 Trinary GPU & System Loader
- * Architecture: 50-Trit Address Space
- * Mapping: Balanced Trits (-1, 0, 1)
+ * VOID-3 TRANSCENDENT CPU - v2.4 (Launcher Optimized)
+ * Optimized for Balanced Ternary Operations & Dynamic App Switching
  */
-class TrinaryGPU {
-    constructor() { 
-        // VOID-3 Resolution: 243x243 (3^5)
-        this.canvas = createCanvas(243, 243); 
-        this.ctx = this.canvas.getContext('2d');
+
+class Void3CPU {
+    constructor(memoryBuffer) {
+        this.memory = memoryBuffer;
+        this.regs = Array.from({ length: 27 }, () => 0n);
+        
+        // Boot at the Launcher address
+        this.pc = 531441;
+        this.sp = 1594322;
+        this.regs[25] = BigInt(this.sp);
+        
+        this.halted = false;
+        this.mouseX = 0;
+        this.mouseY = 0;
+        this.mouseClicked = 0;
+        this.keys = {};
+        
+        this.TRIT_LIMIT = 3n ** 50n;
+        this.HALF_LIMIT = this.TRIT_LIMIT / 2n;
     }
 
-    /**
-     * Renders the VRAM buffer to a PNG frame.
-     * Maps the trinary color range [-13, 13] to RGB [0, 255].
-     */
-    render(vram) {
-        const imgData = this.ctx.createImageData(243, 243);
-        
-        // Loop through every pixel (3^10 = 59049)
-        for (let i = 0; i < 59049; i++) {
-            let addr = i * 9; // 9 trits per pixel (3R, 3G, 3B)
-            let r_val = 0, g_val = 0, b_val = 0;
+    updateMouse(x, y, click) {
+        this.mouseX = x;
+        this.mouseY = y;
+        this.mouseClicked = click;
+    }
 
-            // Calculate channel values using powers of 3
-            for(let t = 0; t < 3; t++) {
-                r_val += (vram[addr + t] || 0) * Math.pow(3, t);
-                g_val += (vram[addr + 3 + t] || 0) * Math.pow(3, t);
-                b_val += (vram[addr + 6 + t] || 0) * Math.pow(3, t);
-            }
+    updateKey(keyCode, isPressed) {
+        this.keys[keyCode] = isPressed ? 1 : 0;
+    }
 
-            let p = i * 4;
+    clamp(val) {
+        let res = val % this.TRIT_LIMIT;
+        if (res > this.HALF_LIMIT) res -= this.TRIT_LIMIT;
+        if (res < -this.HALF_LIMIT) res += this.TRIT_LIMIT;
+        return res;
+    }
 
-            /** * THE COLOR FIX:
-             * Balanced trits sum to a range of -13 to +13.
-             * (val + 13) shifts range to [0, 26].
-             * Multiplying by 9.807 scales it to [0, 255].
-             */
-            imgData.data[p]     = Math.max(0, Math.min(255, Math.floor((r_val + 13) * 9.807))); 
-            imgData.data[p + 1] = Math.max(0, Math.min(255, Math.floor((g_val + 13) * 9.807)));
-            imgData.data[p + 2] = Math.max(0, Math.min(255, Math.floor((b_val + 13) * 9.807)));
-            imgData.data[p + 3] = 255; // Alpha always full
+    decode(addr, length) {
+        let val = 0n;
+        for (let i = 0; i < length; i++) {
+            let trit = BigInt(this.memory[addr + i] || 0);
+            val += trit * (3n ** BigInt(i));
+        }
+        return val;
+    }
+
+    encode(addr, length, value) {
+        let temp = value;
+        for (let i = 0; i < length; i++) {
+            let trit = Number(((temp + 1n) % 3n) - 1n);
+            this.memory[addr + i] = trit;
+            temp = (temp - BigInt(trit)) / 3n;
+        }
+    }
+
+    step() {
+        if (this.halted) return;
+
+        const op = Number(this.decode(this.pc, 4));
+        const a1 = Number(this.decode(this.pc + 4, 5)) % 27;
+        const a2Val = this.decode(this.pc + 9, 6);
+
+        switch (op) {
+            case 0:  this.halted = true; break;
+            
+            case 1:  this.regs[a1] = this.clamp(this.regs[a1] + this.regs[Number(a2Val) % 27]); break;
+            case 2:  this.regs[a1] = this.clamp(this.regs[a1] - this.regs[Number(a2Val) % 27]); break;
+            case 3:  this.regs[a1] = this.clamp(this.regs[a1] * this.regs[Number(a2Val) % 27]); break;
+            
+            case 11: this.regs[a1] = this.clamp(a2Val); break;
+            case 12: this.regs[a1] = this.regs[Number(a2Val) % 27]; break;
+
+            case 20: // JMP: Now Absolute (for jumping to App Slots)
+                this.pc = Number(a2Val); 
+                return; // Prevent pc += 15 increment
+
+            case 21: // BRN
+                if (this.regs[a1] < 0n) { this.pc = Number(a2Val); return; }
+                break;
+            case 22: // BRP
+                if (this.regs[a1] > 0n) { this.pc = Number(a2Val); return; }
+                break;
+
+            case 23: // TRI
+                let v1 = this.regs[a1];
+                let v2 = this.regs[Number(a2Val) % 27];
+                if (v1 < v2) this.regs[a1] = -1n;
+                else if (v1 > v2) this.regs[a1] = 1n;
+                else this.regs[a1] = 0n;
+                break;
+
+            case 30: this.drawRect(); break;
+
+            case 31: // WAK
+                if (a2Val === 50n) this.regs[a1] = BigInt(this.mouseX);
+                else if (a2Val === 51n) this.regs[a1] = BigInt(this.mouseY);
+                else if (a2Val === 52n) this.regs[a1] = BigInt(this.mouseClicked);
+                break;
+
+            case 32: // KEY 
+                let kCode = Number(a2Val);
+                let isDown = this.keys[kCode] === 1;
+                this.regs[a1] = isDown ? 13n : 0n;
+                break;
+            
+            case 45: this.halted = true; break;
         }
 
-        this.ctx.putImageData(imgData, 0, 0);
-        
-        // Write frame to disk for the display server (feh)
-        const buffer = this.canvas.toBuffer();
-        fs.writeFileSync('frame.png', buffer);
+        this.pc += 15;
+    }
 
-        // Refresh the display background
-        // Note: export DISPLAY=:1 is for headless/virtual framebuffers
-        exec('export DISPLAY=:1 && feh --bg-scale --refresh 0.1 frame.png', (error) => {
-            if (error) {
-                // Silencing background errors to prevent log flooding
+    drawRect() {
+        const r = this.regs[0];
+        const g = this.regs[1];
+        const b = this.regs[2];
+        const x = Number(this.regs[3]);
+        const y = Number(this.regs[4]);
+        const w = Number(this.regs[5]);
+        const h = Number(this.regs[6]);
+
+        for (let i = 0; i < w; i++) {
+            for (let j = 0; j < h; j++) {
+                let tx = x + i;
+                let ty = y + j;
+                if (tx >= 0 && tx < 243 && ty >= 0 && ty < 243) {
+                    let addr = (ty * 243 + tx) * 9;
+                    this.encode(addr, 3, r);
+                    this.encode(addr + 3, 3, g);
+                    this.encode(addr + 6, 3, b);
+                }
             }
-        });
+        }
     }
 }
 
-// --- SYSTEM INITIALIZATION ---
-
-// Use Float64Array or BigInt64Array for 50-trit memory stability
-const vram = new Int8Array(10000000); // 10MB VRAM Buffer
-const gpu = new TrinaryGPU();
-
-/**
- * Main System Loop
- * Handles the 20,000 line draw and the transition to paint.vasm
- */
-function startOS() {
-    console.log("VOID-3: Booting 50-Trit Environment...");
-    
-    // 1. Initial Render
-    gpu.render(vram);
-
-    // 2. Refresh Loop
-    setInterval(() => {
-        // Only re-render if the CPU has modified VRAM (Dirty Bit check)
-        gpu.render(vram);
-    }, 100); // 10 FPS to save CPU cycles for the 20,000 line processing
-}
-
-module.exports = TrinaryGPU;
-
-// Start if run directly
-if (require.main === module) {
-    startOS();
-}
+module.exports = Void3CPU;
