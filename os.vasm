@@ -1,73 +1,35 @@
-// --- VOID-OS Modern Desktop ---
+// Compiled from Trit-C
 
-// 1. Background: Deep Charcoal (Base Layer)
-SET 0 3
-SET 1 3
-SET 2 4
+// --- 1. DRAW BACKGROUND (Dark Slate) ---
+SET 0 -1
+SET 1 -1
+SET 2 0
 SET 3 0
 SET 4 0
 SET 5 243
 SET 6 243
 RECT
 
-// 2. Main Window Shadow (Slightly Offset)
-SET 0 1
-SET 1 1
-SET 2 1
-SET 3 43
-SET 4 43
-SET 5 160
-SET 6 120
-RECT
+// --- 2. ICON DATA FETCH ---
+// We manually pull 1 pixel and blow it up to ensure WAK works
+SET 22 1000000
+WAK 0 22
+ADD 22 1
+WAK 1 22
+ADD 22 1
+WAK 2 22
+ADD 22 1
 
-// 3. Main Window Body: Frosted Glass Gray
-SET 0 8
-SET 1 8
-SET 2 9
-SET 3 40
+// --- 3. DRAW ICON AS A BLOCK ---
+// We use the color pulled from app.png
+// If app.png wasn't found, this box will be black
+SET 3 30
 SET 4 40
-SET 5 160
-SET 6 120
+SET 5 50
+SET 6 50
 RECT
 
-// 4. Window Title Bar: Electric Blue Accent
-SET 0 0
-SET 1 10
-SET 2 25
-SET 3 40
-SET 4 40
-SET 5 160
-SET 6 15
-RECT
-
-// 5. Modern Bottom Taskbar: Deep Slate
-SET 0 2
-SET 1 2
-SET 2 3
-SET 3 0
-SET 4 220
-SET 5 243
-SET 6 23
-RECT
-
-// 6. Start Button: Neon Mint
-SET 0 0
-SET 1 25
-SET 2 13
-SET 3 5
-SET 4 224
-SET 5 30
-SET 6 15
-RECT
-
-// 7. System Clock Area (Right Side)
-SET 0 5
-SET 1 5
-SET 2 7
-SET 3 190
-SET 4 224
-SET 5 48
-SET 6 15
-RECT
-
-HALT
+// --- 4. PREVENT SHUTDOWN ---
+SET 25 1
+TRI 25 25
+BRN 25 -15

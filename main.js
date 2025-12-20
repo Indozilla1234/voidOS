@@ -1,10 +1,12 @@
 const Void3CPU = require('./cpu.js');
 const TrinaryGPU = require('./gpu.js');
 const fs = require('fs');
+const path = require('path');
 const x11 = require('x11');
+const { PNG } = require('pngjs');
 
-// --- 1. INITIALIZATION ---
-const memory = new Int8Array(1594323); 
+// --- 1. HARDWARE ---
+const memory = new Int8Array(1594323);
 const gpu = new TrinaryGPU();
 const cpu = new Void3CPU(memory);
 
@@ -14,40 +16,56 @@ const OPMAP = {
     "WAK": 31, "KEY": 32, "SLP": 45
 };
 
-// --- 2. X11 HARDWARE BRIDGE ---
-// This connects to the DISPLAY=:1 created by your bash script
-x11.createClient({ display: ':1' }, (err, display) => {
-    if (err) {
-        console.error("X11 ERROR: Ensure your bash script is running and DISPLAY is :1");
-        return;
+// --- 2. THE SEARCHER (Finds app.png anywhere) ---
+function findIconPath(dir, targetFile) {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+            const found = findIconPath(fullPath, targetFile);
+            if (found) return found;
+        } else if (file.toLowerCase() === targetFile.toLowerCase()) {
+            return fullPath;
+        }
     }
-    const X = display.client;
-    const root = display.screen[0].root;
+    return null;
+}
 
-    // Capture KeyPress (2) and PointerMotion (6) from the X Server
-    X.ChangeWindowAttributes(root, { 
-        eventMask: x11.eventMask.KeyPress | x11.eventMask.PointerMotion 
-    });
+// --- 3. THE VASM COMPILER ---
+function compileIconToVasm() {
+    const vasmPath = path.join(__dirname, 'main.vasm');
+    let iconPath = findIconPath(__dirname, 'app.png');
+    
+    let vasmContent = `// Compiled from Trit-C\n`;
+    vasmContent += `SET 0 -1\nSET 1 -1\nSET 2 0\nSET 3 0\nSET 4 0\nSET 5 243\nSET 6 243\nRECT\n`;
 
-    X.on('event', (ev) => {
-        if (ev.type === 2) { // KEYBOARD
-            // X11 Keycodes are raw hardware codes. 
-            // Space is typically 65, Arrows are usually 111 (Up), 116 (Down), 113 (Left), 114 (Right)
-            cpu.updateKey(ev.keycode, true);
-            setTimeout(() => cpu.updateKey(ev.keycode, false), 70);
+    if (iconPath) {
+        console.log(`VOID-3: SUCCESS! Found icon at: ${iconPath}`);
+        const data = fs.readFileSync(iconPath);
+        const png = PNG.sync.read(data);
+        
+        for (let y = 0; y < png.height; y++) {
+            for (let x = 0; x < png.width; x++) {
+                const idx = (png.width * y + x) << 2;
+                if (png.data[idx+3] < 128) continue;
+
+                const r = png.data[idx] > 160 ? 13 : (png.data[idx] < 90 ? -13 : 0);
+                const g = png.data[idx+1] > 160 ? 13 : (png.data[idx+1] < 90 ? -13 : 0);
+                const b = png.data[idx+2] > 160 ? 13 : (png.data[idx+2] < 90 ? -13 : 0);
+
+                vasmContent += `SET 0 ${r}\nSET 1 ${g}\nSET 2 ${b}\nSET 3 ${30 + x}\nSET 4 ${40 + y}\nSET 5 1\nSET 6 1\nRECT\n`;
+            }
         }
-        if (ev.type === 6) { // MOUSE
-            // ev.x and ev.y are the absolute coordinates on the 800x600 Xvfb screen
-            // We scale them down to your 243x243 ternary resolution
-            const scaledX = Math.floor((ev.x / 800) * 243);
-            const scaledY = Math.floor((ev.y / 600) * 243);
-            cpu.updateMouse(scaledX, scaledY, 0);
-        }
-    });
-    console.log("VOID-3: X11 Input Link Established on :1");
-});
+    } else {
+        console.error("VOID-3: CRITICAL - app.png is missing from the entire workspace!");
+        vasmContent += `SET 0 13\nSET 1 -13\nSET 2 -13\nSET 3 100\nSET 4 100\nSET 5 20\nSET 6 20\nRECT\n`;
+    }
 
-// --- 3. THE ASSEMBLER & ENCODER ---
+    vasmContent += `HALT\n`;
+    fs.writeFileSync(vasmPath, vasmContent);
+}
+
+// --- 4. ASSEMBLER ---
 function encodeBalanced(ptr, length, value) {
     let temp = BigInt(value);
     for (let i = 0; i < length; i++) {
@@ -58,10 +76,10 @@ function encodeBalanced(ptr, length, value) {
     return ptr + length;
 }
 
-function assemble(filename) {
-    if (!fs.existsSync(filename)) return;
-    const lines = fs.readFileSync(filename, 'utf8').split('\n');
-    let ptr = 531441; 
+function assemble(filename, startAddr) {
+    const fullPath = path.join(__dirname, filename);
+    const lines = fs.readFileSync(fullPath, 'utf8').split('\n');
+    let ptr = startAddr; 
     lines.forEach(line => {
         const clean = line.split('//')[0].trim();
         if (!clean) return;
@@ -72,23 +90,34 @@ function assemble(filename) {
         ptr = encodeBalanced(ptr, 5, parseInt(parts[1]) || 0);   
         ptr = encodeBalanced(ptr, 6, parseInt(parts[2]) || 0);   
     });
-    console.log(`VOID-3: VASM Loaded from ${filename}`);
 }
 
-// --- 4. EXECUTION LOOP ---
-assemble('main.vasm');
+// --- 5. RUNTIME ---
+compileIconToVasm();
+assemble('main.vasm', 531441); 
 
 setInterval(() => {
-    // Reset standard drawing registers
-    for(let r=0; r<=6; r++) cpu.regs[r] = 0n;
-    cpu.pc = 531441;
-    cpu.halted = false;
-
-    // Run the CPU for this frame
-    for(let i=0; i<30000 && !cpu.halted; i++) {
+    if (cpu.halted) {
+        cpu.pc = 531441;
+        cpu.halted = false;
+    }
+    // Boosted speed for massive VASM files
+    for(let i=0; i<150000 && !cpu.halted; i++) {
         cpu.step(); 
     }
-    
-    // Push buffer to GPU
-    gpu.render(memory.slice(0, 531441));
+    gpu.render(cpu.memory);
 }, 100);
+
+// --- 6. X11 (Non-Blocking) ---
+x11.createClient({ display: ':1' }, (err, display) => {
+    if (err) return;
+    const X = display.client;
+    X.on('error', () => {}); // Catch all X11 errors silently
+    const root = display.screen[0].root;
+    X.ChangeWindowAttributes(root, { eventMask: x11.eventMask.PointerMotion | x11.eventMask.ButtonPress });
+    X.on('event', (ev) => {
+        if (ev.type === 4) cpu.updateMouse(cpu.mouseX, cpu.mouseY, 1);
+        if (ev.type === 5) cpu.updateMouse(cpu.mouseX, cpu.mouseY, 0);
+        if (ev.type === 6) cpu.updateMouse(Math.floor((ev.x / 800) * 243), Math.floor((ev.y / 600) * 243), cpu.mouseClicked);
+    });
+});

@@ -1,6 +1,6 @@
 /**
- * VOID-3 TRANSCENDENT CPU - v2.3 (High-Intensity Input & Debug)
- * Optimized for Balanced Ternary Operations
+ * VOID-3 TRANSCENDENT CPU - v2.4 (Launcher Optimized)
+ * Optimized for Balanced Ternary Operations & Dynamic App Switching
  */
 
 class Void3CPU {
@@ -8,15 +8,16 @@ class Void3CPU {
         this.memory = memoryBuffer;
         this.regs = Array.from({ length: 27 }, () => 0n);
         
-        this.pc = 531441;           
-        this.sp = 1594322;          
+        // Boot at the Launcher address
+        this.pc = 531441;
+        this.sp = 1594322;
         this.regs[25] = BigInt(this.sp);
         
         this.halted = false;
         this.mouseX = 0;
         this.mouseY = 0;
-        this.mouseClicked = 0; 
-        this.keys = {};        
+        this.mouseClicked = 0;
+        this.keys = {};
         
         this.TRIT_LIMIT = 3n ** 50n;
         this.HALF_LIMIT = this.TRIT_LIMIT / 2n;
@@ -29,7 +30,6 @@ class Void3CPU {
     }
 
     updateKey(keyCode, isPressed) {
-        // Force strict 1 or 0 for the map
         this.keys[keyCode] = isPressed ? 1 : 0;
     }
 
@@ -68,19 +68,22 @@ class Void3CPU {
         switch (op) {
             case 0:  this.halted = true; break;
             
-            case 1:  this.regs[a1] = this.clamp(this.regs[a1] + this.regs[Number(a2Val) % 27]); break; 
-            case 2:  this.regs[a1] = this.clamp(this.regs[a1] - this.regs[Number(a2Val) % 27]); break; 
-            case 3:  this.regs[a1] = this.clamp(this.regs[a1] * this.regs[Number(a2Val) % 27]); break; 
+            case 1:  this.regs[a1] = this.clamp(this.regs[a1] + this.regs[Number(a2Val) % 27]); break;
+            case 2:  this.regs[a1] = this.clamp(this.regs[a1] - this.regs[Number(a2Val) % 27]); break;
+            case 3:  this.regs[a1] = this.clamp(this.regs[a1] * this.regs[Number(a2Val) % 27]); break;
             
-            case 11: this.regs[a1] = this.clamp(a2Val); break; // SET
-            case 12: this.regs[a1] = this.regs[Number(a2Val) % 27]; break; // CPY
+            case 11: this.regs[a1] = this.clamp(a2Val); break;
+            case 12: this.regs[a1] = this.regs[Number(a2Val) % 27]; break;
 
-            case 20: this.pc += (Number(a2Val) - 15); break; // JMP
+            case 20: // JMP: Now Absolute (for jumping to App Slots)
+                this.pc = Number(a2Val); 
+                return; // Prevent pc += 15 increment
+
             case 21: // BRN
-                if (this.regs[a1] < 0n) this.pc += (Number(a2Val) - 15);
+                if (this.regs[a1] < 0n) { this.pc = Number(a2Val); return; }
                 break;
             case 22: // BRP
-                if (this.regs[a1] > 0n) this.pc += (Number(a2Val) - 15);
+                if (this.regs[a1] > 0n) { this.pc = Number(a2Val); return; }
                 break;
 
             case 23: // TRI
@@ -91,7 +94,7 @@ class Void3CPU {
                 else this.regs[a1] = 0n;
                 break;
 
-            case 30: this.drawRect(); break; 
+            case 30: this.drawRect(); break;
 
             case 31: // WAK
                 if (a2Val === 50n) this.regs[a1] = BigInt(this.mouseX);
@@ -100,18 +103,12 @@ class Void3CPU {
                 break;
 
             case 32: // KEY 
-                // Convert BigInt constant to number for lookup
                 let kCode = Number(a2Val);
                 let isDown = this.keys[kCode] === 1;
-                this.regs[a1] = isDown ? 13n : 0n; 
-                
-                // DEBUG: Only prints if space is pressed
-                if (isDown && kCode === 32) {
-                   // console.log("CPU: Space Signal Detected!");
-                }
+                this.regs[a1] = isDown ? 13n : 0n;
                 break;
             
-            case 45: this.halted = true; break; // SLP
+            case 45: this.halted = true; break;
         }
 
         this.pc += 15;
