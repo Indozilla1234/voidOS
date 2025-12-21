@@ -6,7 +6,7 @@ const x11 = require('x11');
 const { PNG } = require('pngjs');
 
 // --- 1. HARDWARE ---
-const memory = new Int8Array(1594323);
+const memory = new Int8Array(3486784401);
 for (let i = 0; i < memory.length; i++) memory[i] = 0; 
 const gpu = new TrinaryGPU();
 const cpu = new Void3CPU(memory);
