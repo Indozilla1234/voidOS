@@ -66,7 +66,7 @@ class TrinaryGPU {
 
 // Use Float64Array or BigInt64Array for 50-trit memory stability
 const vram = new Int8Array(Math.pow(3, 20)); //node.js:🫠
-const gpu = new TrinaryGPU();
+
 
 /**
  * Main System Loop
@@ -90,4 +90,8 @@ module.exports = TrinaryGPU;
 // Start if run directly
 if (require.main === module) {
     startOS();
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> dd31551f9e137be43aed983e300d80c068f582cc
