@@ -65,7 +65,7 @@ class TrinaryGPU {
 // --- SYSTEM INITIALIZATION ---
 
 // Use Float64Array or BigInt64Array for 50-trit memory stability
-const vram = new Int8Array(10000000); // 10MB VRAM Buffer
+const vram = new Int8Array(Math.pow(3, 20)); //node.js:🫠
 const gpu = new TrinaryGPU();
 
 /**
