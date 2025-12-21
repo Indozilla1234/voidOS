@@ -1,14 +1,15 @@
 /**
- * VOID-3 TRANSCENDENT CPU - v2.4 (Launcher Optimized)
- * Optimized for Balanced Ternary Operations & Dynamic App Switching
+ * VOID-3 TRANSCENDENT CPU - v2.5 (Launcher & I/O Fixed)
+ * Optimized for Balanced Ternary Operations & Persistent Mouse Polling
  */
 
 class Void3CPU {
     constructor(memoryBuffer) {
         this.memory = memoryBuffer;
+        // 27 Registers (Balanced Trinary -1, 0, 1 logic inside)
         this.regs = Array.from({ length: 27 }, () => 0n);
         
-        // Boot at the Launcher address
+        // Boot Address (Synchronized with main.js)
         this.pc = 531441;
         this.sp = 1594322;
         this.regs[25] = BigInt(this.sp);
@@ -19,6 +20,7 @@ class Void3CPU {
         this.mouseClicked = 0;
         this.keys = {};
         
+        // 50-Trit Limits
         this.TRIT_LIMIT = 3n ** 50n;
         this.HALF_LIMIT = this.TRIT_LIMIT / 2n;
     }
@@ -33,6 +35,7 @@ class Void3CPU {
         this.keys[keyCode] = isPressed ? 1 : 0;
     }
 
+    // Ensures numbers stay within the 50-trit "Balanced" range
     clamp(val) {
         let res = val % this.TRIT_LIMIT;
         if (res > this.HALF_LIMIT) res -= this.TRIT_LIMIT;
@@ -68,25 +71,28 @@ class Void3CPU {
         switch (op) {
             case 0:  this.halted = true; break;
             
+            // Arithmetic
             case 1:  this.regs[a1] = this.clamp(this.regs[a1] + this.regs[Number(a2Val) % 27]); break;
             case 2:  this.regs[a1] = this.clamp(this.regs[a1] - this.regs[Number(a2Val) % 27]); break;
             case 3:  this.regs[a1] = this.clamp(this.regs[a1] * this.regs[Number(a2Val) % 27]); break;
             
+            // Data Movement
             case 11: this.regs[a1] = this.clamp(a2Val); break;
             case 12: this.regs[a1] = this.regs[Number(a2Val) % 27]; break;
 
-            case 20: // JMP: Now Absolute (for jumping to App Slots)
+            // Flow Control
+            case 20: // JMP
                 this.pc = Number(a2Val); 
-                return; // Prevent pc += 15 increment
+                return; 
 
-            case 21: // BRN
+            case 21: // BRN (Branch if Negative)
                 if (this.regs[a1] < 0n) { this.pc = Number(a2Val); return; }
                 break;
-            case 22: // BRP
+            case 22: // BRP (Branch if Positive)
                 if (this.regs[a1] > 0n) { this.pc = Number(a2Val); return; }
                 break;
 
-            case 23: // TRI
+            case 23: // TRI (Trinary Comparison)
                 let v1 = this.regs[a1];
                 let v2 = this.regs[Number(a2Val) % 27];
                 if (v1 < v2) this.regs[a1] = -1n;
@@ -94,12 +100,14 @@ class Void3CPU {
                 else this.regs[a1] = 0n;
                 break;
 
+            // Graphics
             case 30: this.drawRect(); break;
 
-            case 31: // WAK
-                if (a2Val === 50n) this.regs[a1] = BigInt(this.mouseX);
-                else if (a2Val === 51n) this.regs[a1] = BigInt(this.mouseY);
-                else if (a2Val === 52n) this.regs[a1] = BigInt(this.mouseClicked);
+            // Hardware I/O (FIXED FOR LAUNCHER)
+            case 31: // WAK (Hardware Poll)
+                if (a2Val === 0n)      this.regs[a1] = BigInt(this.mouseX);
+                else if (a2Val === 1n) this.regs[a1] = BigInt(this.mouseY);
+                else if (a2Val === 2n) this.regs[a1] = BigInt(this.mouseClicked);
                 break;
 
             case 32: // KEY 
@@ -127,6 +135,7 @@ class Void3CPU {
             for (let j = 0; j < h; j++) {
                 let tx = x + i;
                 let ty = y + j;
+                // Bound check for the 243x243 Trinary Display
                 if (tx >= 0 && tx < 243 && ty >= 0 && ty < 243) {
                     let addr = (ty * 243 + tx) * 9;
                     this.encode(addr, 3, r);
