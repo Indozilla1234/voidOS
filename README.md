@@ -11,6 +11,6 @@ Address Storage: 141.6 PETABYTES(no joke)
 
 VRAM: 3.25 Gigabytes
 
-RAM: 1.59 Megabytes
+RAM: 3.25 Megabytes
 
 This is enough that you could store 2.8 million copies of DOOM Eternal and still have room for a digital library of all human knowledge.
