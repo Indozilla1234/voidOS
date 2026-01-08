@@ -1,26 +1,16 @@
-// Compiled from Trit-C
-
-
-// 2. Poll Mouse Coordinates
-WAK 3 50
-WAK 4 51
-
-// 3. Poll Spacebar for Toggle
-KEY 7 32
-ADD 10 7
-
-// 4. Color Cycle (Red -> Green -> Blue)
-SET 0 13
-SUB 0 10
-SET 1 0
-ADD 1 10
-SET 2 0
-CPY 2 10
-SUB 2 13
-
-// 5. Draw Box at Mouse
-SET 5 25
-SET 6 25
+WAK 10 11 12
+SET 20 0
+SUB 21 10 20
+SET 25 531441
+SET 26 531456
+TRI 21 25 25 26
+SET 0 1
+SET 1 1
+SET 2 1
+CPY 3 11
+CPY 4 12
+SET 5 1
+SET 6 1
 RECT
-
-HALT
+SET 20 531441
+JMP 20
