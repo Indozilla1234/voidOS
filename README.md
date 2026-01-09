@@ -7,7 +7,7 @@ Attempt to make a virtual PC using trinary
 
 I'm not going to lie I cooked up here
 
-Address Storage: 141.6 PETABYTES(no joke)
+Address Storage: 141.6 million PETABYTES(no joke)
 
 VRAM: 3.25 Gigabytes
 
