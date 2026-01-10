@@ -1,5 +1,4 @@
 #!/bin/bash
-// Compiled from Trit-C
 
 npm install uiohook-napi
 npm install x11
