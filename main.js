@@ -4,8 +4,10 @@ const fs = require('fs');
 const x11 = require('x11');
 const { PNG } = require('pngjs');
 const path = require('path');
+const { createCanvas, loadImage } = require('canvas');
 
 // --- 1. HARDWARE INITIALIZATION ---
+// 3^20 elements ~ 3.4GB. Ensure node is run with --max-old-space-size=4096
 const memory = new Int8Array(3486784401); 
 const gpu = new TrinaryGPU();
 const cpu = new Void3CPU(memory);
@@ -18,12 +20,47 @@ const OPMAP = {
 
 // --- 2. DYNAMIC APP REGISTRY ---
 let appRegistry = [];
-let vAsmBuffer = [
-    "SET 0 0", "SET 1 0", "SET 2 0", "SET 3 0", "SET 4 0", "SET 5 243", "SET 6 243", "RECT" // Clear screen to black
-];
+let vAsmBuffer = []; // Start empty to allow the wallpaper to be visible
 
 /**
- * Processes a single PNG icon and adds its draw commands to the VASM buffer
+ * Loads bg.png from /desktop, resizes to 243x243, and writes to VRAM
+ */
+async function loadWallpaper() {
+    const bgPath = './desktop/bg.png';
+    if (!fs.existsSync(bgPath)) {
+        process.stdout.write("[BOOT] No bg.png found in /desktop. Using black background.\n");
+        return;
+    }
+
+    try {
+        const img = await loadImage(bgPath);
+        const bgCanvas = createCanvas(243, 243);
+        const bgCtx = bgCanvas.getContext('2d');
+        
+        bgCtx.drawImage(img, 0, 0, 243, 243);
+        const imgData = bgCtx.getImageData(0, 0, 243, 243).data;
+
+        process.stdout.write("[BOOT] Applying Wallpaper to VRAM...\n");
+
+        for (let i = 0; i < 59049; i++) {
+            let p = i * 4;
+            let addr = i * 9;
+
+            let r = Math.round((imgData[p] / 9.807) - 13);
+            let g = Math.round((imgData[p + 1] / 9.807) - 13);
+            let b = Math.round((imgData[p + 2] / 9.807) - 13);
+
+            cpu.encode(addr, 3, BigInt(r));
+            cpu.encode(addr + 3, 3, BigInt(g));
+            cpu.encode(addr + 6, 3, BigInt(b));
+        }
+    } catch (err) {
+        process.stdout.write(`[ERROR] Wallpaper Load Failed: ${err.message}\n`);
+    }
+}
+
+/**
+ * Processes a PNG icon and adds its draw commands to the VASM buffer
  */
 async function processIcon(pngPath, startX, startY) {
     return new Promise((resolve) => {
@@ -31,7 +68,6 @@ async function processIcon(pngPath, startX, startY) {
             for (let y = 0; y < 50; y++) {
                 for (let x = 0; x < 50; x++) {
                     let idx = (this.width * y + x) << 2;
-                    // Balanced Ternary Color Mapping (-13 to 13)
                     let r = Math.round((this.data[idx] / 9.807) - 13);
                     let g = Math.round((this.data[idx+1] / 9.807) - 13);
                     let b = Math.round((this.data[idx+2] / 9.807) - 13);
@@ -47,13 +83,14 @@ async function processIcon(pngPath, startX, startY) {
 }
 
 /**
- * Scans /apps/ for subdirectories and builds the launcher UI
+ * Scans ./desktop/apps/ for subdirectories and builds main.vasm
  */
 async function buildLauncher() {
-    process.stdout.write("[BOOT] Scanning for apps...\n");
-    const appsDir = './apps';
+    const appsDir = './desktop/apps';
+    process.stdout.write(`[BOOT] Scanning ${appsDir} for apps...\n`);
+    
     if (!fs.existsSync(appsDir)) {
-        fs.mkdirSync(appsDir);
+        process.stdout.write(`[ERROR] ${appsDir} directory not found!\n`);
         return;
     }
 
@@ -65,13 +102,14 @@ async function buildLauncher() {
 
     for (const folder of folders) {
         const appPath = path.join(appsDir, folder);
+        if (!fs.lstatSync(appPath).isDirectory()) continue;
+
         const pngPath = path.join(appPath, 'app.png');
         const vasmPath = path.join(appPath, `${folder}.vasm`);
 
         if (fs.existsSync(pngPath) && fs.existsSync(vasmPath)) {
             process.stdout.write(`[FOUND] ${folder} at grid (${xPos}, ${yPos})\n`);
             
-            // Add to Registry for Hitbox detection
             appRegistry.push({
                 name: folder,
                 vasm: vasmPath,
@@ -79,19 +117,16 @@ async function buildLauncher() {
                 x2: xPos + iconSize, y2: yPos + iconSize
             });
 
-            // Add icon to the VASM draw buffer
             await processIcon(pngPath, xPos, yPos);
 
-            // Advance grid
             xPos += iconSize + padding;
-            if (xPos > 180) { // Screen width 243, wrap at 180
+            if (xPos > 180) { 
                 xPos = 20;
                 yPos += iconSize + padding;
             }
         }
     }
 
-    // Loop logic: keep the launcher idle after drawing
     vAsmBuffer.push("SET 20 531441\nJMP 20");
     fs.writeFileSync('main.vasm', vAsmBuffer.join('\n'));
 }
@@ -124,18 +159,30 @@ function assemble(filename, startAddr) {
 }
 
 function launchApp(vasmPath) {
-    process.stdout.write(`\n[KERNEL] INTERRUPT: Launching ${vasmPath}...\n`);
+    process.stdout.write(`\n[KERNEL] KILLING DESKTOP & LAUNCHING: ${vasmPath}...\n`);
     cpu.halted = true;
 
-    // Wipe memory (Balanced 0 = Grey/Middle)
-    for (let i = 0; i < 2000000; i++) memory[i] = 0;
+    // 1. CLEAR VRAM (Hides wallpaper and icons immediately)
+    // 243 * 243 * 9 = 531,441 trits
+    for (let i = 0; i < 531441; i++) {
+        memory[i] = 0;
+    }
+
+    // 2. CLEAR PROGRAM MEMORY (Wipes main.vasm/previous apps)
+    for (let i = 531441; i < 2000000; i++) {
+        memory[i] = 0;
+    }
 
     if (fs.existsSync(vasmPath)) {
+        // 3. ASSEMBLE NEW APP INTO MEMORY
         assemble(vasmPath, 531441);
+        
+        // 4. RESET CPU STATE
         cpu.regs.fill(0n);
         cpu.pc = 531441;
         cpu.halted = false;
-        process.stdout.write("[SYSTEM] EXECUTION TRANSFERRED\n");
+        
+        process.stdout.write("[SYSTEM] DESKTOP KILLED. APP OWNERSHIP ESTABLISHED.\n");
     }
 }
 
@@ -145,15 +192,28 @@ x11.createClient({ display: ':1' }, (err, display) => {
     const X = display.client;
     const root = display.screen[0].root;
 
+    X.on('error', (e) => {
+        if (e.error === 10) {
+            console.warn("[X11] GrabButton Access Denied. Input may be limited.");
+        } else {
+            console.error("[X11] Protocol Error:", e);
+        }
+    });
+
     const mask = x11.eventMask.ButtonPress | x11.eventMask.PointerMotion;
-    X.GrabButton(root, 0, mask, 1, 1, 0, 0, 1, 0x8000); 
+    X.GrabButton(root, 0, mask, 1, 1, 0, 0, 1, 0x8000);
 
     X.on('event', (ev) => {
+        let mx = Math.floor((ev.x / 800) * 243);
+        let my = Math.floor((ev.y / 800) * 243);
+
+        if (ev.name === 'MotionNotify') {
+            cpu.updateMouse(mx, my, 0);
+        }
+
         if (ev.name === 'ButtonPress') {
-            let mx = Math.floor((ev.x / 800) * 243);
-            let my = Math.floor((ev.y / 800) * 243);
-            
-            // Iterate through the registry to check which app was clicked
+            cpu.updateMouse(mx, my, 1);
+            // Hitbox detection for launching apps
             for (const app of appRegistry) {
                 if (mx >= app.x1 && mx <= app.x2 && my >= app.y1 && my <= app.y2) {
                     launchApp(app.vasm);
@@ -166,10 +226,15 @@ x11.createClient({ display: ':1' }, (err, display) => {
 
 // --- 5. EXECUTION LOOP ---
 async function boot() {
-    // 1. Scan /apps/ and build the main.vasm UI
+    process.stdout.write("--- VOID-3 KERNEL BOOTING ---\n");
+    
+    // 1. Draw Background directly to VRAM
+    await loadWallpaper();
+    
+    // 2. Scan Apps and generate launcher draw calls
     await buildLauncher();
     
-    // 2. Load the launcher into memory
+    // 3. Assemble launcher and start
     assemble('main.vasm', 531441);
     cpu.pc = 531441;
     process.stdout.write("[SYSTEM] VOID-3 Multi-App Kernel Online.\n");
